@@ -17,6 +17,7 @@
     "test": "yarn workspaces run test",
     "lint": "eslint packages --ext .ts,.tsx",
     "typecheck": "yarn workspaces run typecheck",
+    "check:fork": "node scripts/check-fork-patches.mjs",
     "clean": "yarn workspaces run clean && rm -rf node_modules"
   },
   "devDependencies": {

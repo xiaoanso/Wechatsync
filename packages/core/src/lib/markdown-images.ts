@@ -7,7 +7,9 @@ export interface MarkdownImageMatch {
 /**
  * 解析 Markdown 图片语法，支持可选标题和括号 URL
  */
-export function parseMarkdownImages(markdown: string): MarkdownImageMatch[] {
+export function parseMarkdownImages(markdown: string | null | undefined): MarkdownImageMatch[] {
+  if (typeof markdown !== 'string') return []
+
   const results: MarkdownImageMatch[] = []
   const len = markdown.length
   let i = 0

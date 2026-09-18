@@ -38,6 +38,12 @@ describe('parseMarkdownImages', () => {
     expect(matches[0].src).toBe('https://example.com/a.png')
   })
 
+  it('returns empty array for missing markdown', () => {
+    expect(parseMarkdownImages(undefined)).toEqual([])
+    expect(parseMarkdownImages(null)).toEqual([])
+    expect(parseMarkdownImages('')).toEqual([])
+  })
+
   it('parses multiple images and preserves order', () => {
     const md = '![a](https://a.com/1.png) text ![b](https://b.com/2.png)'
     const matches = parseMarkdownImages(md)

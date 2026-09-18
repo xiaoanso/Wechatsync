@@ -11,6 +11,7 @@ import {
 } from '../adapters'
 import * as wordpressAdapter from '../adapters/cms/wordpress'
 import * as metaweblogAdapter from '../adapters/cms/metaweblog'
+import { publishArticleToCms } from '../fork/yian-cms'
 import { startMcpClient, stopMcpClient, getMcpStatus, mcpClient } from '../mcp/client'
 import { createLogger } from '../lib/logger'
 import {
@@ -370,20 +371,7 @@ async function handleMessage(message: MessageAction, sender?: chrome.runtime.Mes
           })
 
           const credentials = { url: account.url, username: account.username, password }
-          let result
-          switch (account.type) {
-            case 'wordpress':
-              result = await wordpressAdapter.publish(credentials, article, { draftOnly: true })
-              break
-            case 'typecho':
-              result = await metaweblogAdapter.publishToTypecho(credentials, article, { draftOnly: true })
-              break
-            case 'metaweblog':
-              result = await metaweblogAdapter.publish(credentials, article, { draftOnly: true })
-              break
-            default:
-              result = { success: false, error: '不支持的 CMS 类型' }
-          }
+          const result = await publishArticleToCms(account.type, credentials, article)
 
           const cmsResult = {
             platform: accountId,
@@ -533,20 +521,7 @@ async function handleMessage(message: MessageAction, sender?: chrome.runtime.Mes
           password,
         }
 
-        let result
-        switch (account.type) {
-          case 'wordpress':
-            result = await wordpressAdapter.publish(credentials, article, { draftOnly: true })
-            break
-          case 'typecho':
-            result = await metaweblogAdapter.publishToTypecho(credentials, article, { draftOnly: true })
-            break
-          case 'metaweblog':
-            result = await metaweblogAdapter.publish(credentials, article, { draftOnly: true })
-            break
-          default:
-            return { success: false, error: '不支持的 CMS 类型' }
-        }
+        const result = await publishArticleToCms(account.type, credentials, article)
 
         // 追踪 CMS 同步结果（含错误类型）
         trackCmsSync('popup', account.type, result.success).catch(() => {})
@@ -832,20 +807,7 @@ async function handleMessage(message: MessageAction, sender?: chrome.runtime.Mes
           })
 
           const credentials = { url: account.url, username: account.username, password }
-          let result
-          switch (account.type) {
-            case 'wordpress':
-              result = await wordpressAdapter.publish(credentials, article, { draftOnly: true })
-              break
-            case 'typecho':
-              result = await metaweblogAdapter.publishToTypecho(credentials, article, { draftOnly: true })
-              break
-            case 'metaweblog':
-              result = await metaweblogAdapter.publish(credentials, article, { draftOnly: true })
-              break
-            default:
-              result = { success: false, error: '不支持的 CMS 类型' }
-          }
+          const result = await publishArticleToCms(account.type, credentials, article)
 
           const cmsResult = {
             platform: accountId,

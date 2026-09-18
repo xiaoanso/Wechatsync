@@ -10,8 +10,7 @@ import {
   getPlatformPreprocessConfigs,
   type SyncDetailProgress,
 } from '../adapters'
-import * as wordpressAdapter from '../adapters/cms/wordpress'
-import * as metaweblogAdapter from '../adapters/cms/metaweblog'
+import { publishArticleToCms } from '../fork/yian-cms'
 import { createLogger } from '../lib/logger'
 
 const logger = createLogger('SyncService')
@@ -243,8 +242,8 @@ export async function performSync(
   // 规范化文章对象，确保必需字段有默认值
   const normalizedArticle = {
     title: article.title,
-    content: article.content || article.html || '',
-    html: article.html || article.content || '',
+    content: article.content || article.html || article.markdown || '',
+    html: article.html || article.content || article.markdown || '',
     markdown: article.markdown || '',
     cover: article.cover,
   }
@@ -373,21 +372,7 @@ export async function performSync(
       onDetailProgress?.({ platform: accountId, platformName: account.name, stage: 'saving' })
 
       const credentials = { url: account.url, username: account.username, password }
-      let result
-
-      switch (account.type) {
-        case 'wordpress':
-          result = await wordpressAdapter.publish(credentials, normalizedArticle, { draftOnly: true })
-          break
-        case 'typecho':
-          result = await metaweblogAdapter.publishToTypecho(credentials, normalizedArticle, { draftOnly: true })
-          break
-        case 'metaweblog':
-          result = await metaweblogAdapter.publish(credentials, normalizedArticle, { draftOnly: true })
-          break
-        default:
-          result = { success: false, error: '不支持的 CMS 类型' }
-      }
+      const result = await publishArticleToCms(account.type, credentials, normalizedArticle)
 
       const cmsResult: SyncResult = {
         platform: accountId,
