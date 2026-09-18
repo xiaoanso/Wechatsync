@@ -6,7 +6,7 @@
 
 | 路径 | 说明 |
 |------|------|
-| `packages/extension/src/fork/yian-cms.ts` | **唯一业务入口**：正文归一化 + `publishArticleToCms`（默认草稿、不转存外链图） |
+| `packages/extension/src/fork/yian-cms.ts` | **唯一业务入口**：正文归一化 + `publishArticleToCms`（默认草稿、不转存外链图）；预览链接改写为 `https://yianso.cn/blog/{slug}` |
 
 文件头含 `FORK PATCH (yian)` 注释。
 
@@ -26,7 +26,7 @@
 | `parseMarkdownImages` 空值防护 | `packages/core/src/lib/markdown-images.ts` | `if (typeof markdown !== 'string') return []`，防御性；可单独向上游 PR |
 | nginx / Edge XML-RPC | 易安小站仓 | 见小站文档，不在本扩展仓 |
 
-刻意**不**改：`wordpress.ts` / `metaweblog.ts`（跟官方一致）。图片卡死靠入口传 `processImages: false` 绕过。
+刻意**不**改：`wordpress.ts` / `metaweblog.ts`（跟官方一致）。图片卡死靠入口传 `processImages: false` 绕过；易安预览 URL 在 `yian-cms.ts` 的 `resolveYianPreviewUrl` 改写。
 
 ## Git 升级约定
 
@@ -57,6 +57,7 @@ pnpm check:fork
 
 ## 手测
 
-1. 知乎文章页 → 同步到 CMS（MetaWeblog）→ `https://mcp.yianso.cn`
+1. 知乎文章页 → 同步到 CMS（MetaWeblog / WordPress）→ `https://mcp.yianso.cn`
 2. 确认草稿写入成功，UI 不长时间停在「保存中」
-3. 正文含知乎图床外链时，不因传图重试卡住（默认不转存）
+3. 预览链接为 `https://yianso.cn/blog/{slug}`，不是 `https://mcp.yianso.cn/wp-admin/post.php?...`
+4. 正文含知乎图床外链时，不因传图重试卡住（默认不转存）
