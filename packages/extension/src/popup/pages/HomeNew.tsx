@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { trackPageView, trackFeatureDiscovery } from '../../lib/analytics'
 import { createLogger } from '../../lib/logger'
 import { getCachedUpdateInfo, dismissUpdate, type UpdateCheckResult } from '../../lib/version-check'
+// FORK: 打开编辑器时注入 content script 重试
+import { openEditorOnActiveTab } from '../../fork/extract-hardening'
 
 const logger = createLogger('HomeNew')
 
@@ -55,7 +57,9 @@ export function HomeNew() {
         if (cached.platformListCache?.length) {
           setAllPlatforms(cached.platformListCache.map((p: any) => ({
             id: p.id, name: p.name, icon: p.icon,
-            isAuthenticated: p.isAuthenticated, username: p.username,
+            // FORK: 缓存不作为登录依据，打开后再勾选时检查
+            isAuthenticated: p.sourceType === 'cms' ? !!p.isAuthenticated : false,
+            username: p.sourceType === 'cms' ? p.username : undefined,
             homepage: p.homepage,
           })))
         }
@@ -95,14 +99,12 @@ export function HomeNew() {
 
   // Open editor
   const handleEditArticle = async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    if (tab?.id) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: 'OPEN_EDITOR',
-        platforms: allPlatforms,
-        selectedPlatforms,
-      })
-      window.close()
+    try {
+      // FORK: extract-hardening
+      const ok = await openEditorOnActiveTab({ platforms: allPlatforms, selectedPlatforms })
+      if (ok) window.close()
+    } catch (error) {
+      logger.error('Failed to open editor:', error)
     }
   }
 

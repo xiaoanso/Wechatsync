@@ -75,12 +75,14 @@ export function EditorApp() {
           } else {
             chrome.storage.local.get(SELECTED_PLATFORMS_KEY).then((result) => {
               const storedPlatforms = result[SELECTED_PLATFORMS_KEY] as string[] | undefined
-              const authenticated = data.platforms.filter((p: Platform) => p.isAuthenticated)
-              const authenticatedIds = authenticated.map((p: Platform) => p.id)
-              const authenticatedSet = new Set(authenticatedIds)
-
+              // FORK: 仅恢复已带登录态的项（通常为 CMS）；DSL 需勾选时再验
+              const readyIds = new Set(
+                data.platforms
+                  .filter((p: Platform) => p.isAuthenticated)
+                  .map((p: Platform) => p.id)
+              )
               const selected = storedPlatforms
-                ? storedPlatforms.filter(id => authenticatedSet.has(id))
+                ? storedPlatforms.filter(id => readyIds.has(id))
                 : []
               setSelectedPlatforms(selected)
             }).catch((e) => {

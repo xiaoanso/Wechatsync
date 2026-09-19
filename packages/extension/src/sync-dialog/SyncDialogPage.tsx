@@ -44,11 +44,13 @@ export function SyncDialogPage() {
             // Load from storage — respect saved state, don't default to all
             chrome.storage.local.get(SELECTED_PLATFORMS_KEY).then(r => {
               const stored = r[SELECTED_PLATFORMS_KEY] as string[] | undefined
-              const authedIds = (data.platforms || [])
-                .filter((p: Platform) => p.isAuthenticated)
-                .map((p: Platform) => p.id)
-              const authedSet = new Set(authedIds)
-              const selected = stored?.filter(id => authedSet.has(id)) || []
+              // FORK: 仅恢复已带登录态的项（通常为 CMS）；DSL 需勾选时再验
+              const readyIds = new Set(
+                (data.platforms || [])
+                  .filter((p: Platform) => p.isAuthenticated)
+                  .map((p: Platform) => p.id)
+              )
+              const selected = stored?.filter(id => readyIds.has(id)) || []
               setSelectedPlatforms(selected)
             }).catch(() => {
               setSelectedPlatforms([])
@@ -113,7 +115,9 @@ export function SyncDialogPage() {
   }
 
   const handleSelectAll = () => {
+    // FORK: 全选由 LazyPlatformList 按已校验登录平台处理；此处保留空实现兼容 props
     const ids = platforms.filter(p => p.isAuthenticated).map(p => p.id)
+    if (ids.length === 0) return
     setSelectedPlatforms(ids)
     saveSelectedPlatforms(ids)
   }

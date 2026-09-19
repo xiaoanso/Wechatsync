@@ -6,20 +6,31 @@
 
 | 路径 | 说明 |
 |------|------|
-| `packages/extension/src/fork/yian-cms.ts` | **唯一业务入口**：正文归一化 + `publishArticleToCms`（默认草稿、不转存外链图）；预览链接改写为 `https://yianso.cn/blog/{slug}` |
+| `packages/extension/src/fork/yian-cms.ts` | **CMS 发布入口**：正文归一化 + `publishArticleToCms`（默认草稿、不转存外链图）；预览链接改写为 `https://yianso.cn/blog/{slug}` |
+| `packages/extension/src/fork/lazy-platform-auth.ts` | **平台登录懒检查**：打开时不批量 `checkAuth`；`resolveCheckAllAuth` / `listPlatformsWithoutAuth` |
+| `packages/extension/src/fork/LazyPlatformList.tsx` | **勾选时验登录 UI**：未知→检查中→已登录高亮 / 未登录置灰去登录 |
+| `packages/extension/src/fork/extract-hardening.ts` | **提取健壮性**：无 content script 时注入重试；忽略非 JSON postMessage；Defuddle clone 补 base |
 
 文件头含 `FORK PATCH (yian)` 注释。
 
-## 上游调用点（约 3 处，仅 import）
+## 上游调用点（仅 import / 薄接线）
 
 | 文件 | 改动 |
 |------|------|
-| `packages/extension/src/background/index.ts` | `import { publishArticleToCms } from '../fork/yian-cms'`，CMS 分支一次调用 |
-| `packages/extension/src/background/sync-service.ts` | 同上 |
+| `packages/extension/src/background/index.ts` | `yian-cms` + `lazy-platform-auth` + `extract-hardening.sendTabMessage`；`CHECK_ALL_AUTH` → `resolveCheckAllAuth`；右键/悬浮打开编辑器用 `listPlatformsWithoutAuth`；`preCheckPlatformsAuth` 空实现 |
+| `packages/extension/src/background/sync-service.ts` | `import { publishArticleToCms } from '../fork/yian-cms'` |
+| `packages/extension/src/components/sync-dialog/SyncDialog.tsx` | `PlatformList` 改从 `fork/LazyPlatformList` import |
+| `packages/extension/src/content/api.ts` | `getAccounts` 传 `forceAuth: true` |
+| `packages/extension/src/content/extractor.ts` | `parseEditorMessage` 从 `fork/extract-hardening` import |
+| `packages/extension/src/lib/reader/index.ts` | `cloneDocumentForExtraction` 从 `fork/extract-hardening` import |
+| `packages/extension/src/popup/stores/sync.ts` | `extractArticleFromActiveTab` |
+| `packages/extension/src/popup/pages/HomeNew.tsx` | `openEditorOnActiveTab` |
+| `packages/extension/src/mcp/client.ts` | `sendTabMessage` |
+| `packages/extension/src/sync-dialog/SyncDialogPage.tsx` / `editor/EditorApp.tsx` | 恢复选中时仅保留已带登录态项（CMS） |
 
-冲突口诀：上游大段以官方为准；**重新接上 `from '../fork/yian-cms'` 即可**，业务逻辑不用重写。
+冲突口诀：上游大段以官方为准；**重新接上 fork import** 即可，业务逻辑不用重写。
 
-## 其它登记（不在 yian-cms 内）
+## 其它登记（不在 fork 业务文件内）
 
 | 项 | 路径 | 说明 |
 |------|------|------|
@@ -52,8 +63,11 @@ pnpm check:fork
 
 断言：
 
-1. `packages/extension/src/fork/yian-cms.ts` 存在
-2. `background/index.ts`、`sync-service.ts` 仍引用 `publishArticleToCms` / `fork/yian-cms`
+1. `fork/yian-cms.ts`、`fork/lazy-platform-auth.ts`、`fork/LazyPlatformList.tsx`、`fork/extract-hardening.ts` 存在
+2. `background/index.ts`、`sync-service.ts` 仍引用 `fork/yian-cms`
+3. `background/index.ts` 仍引用 `fork/lazy-platform-auth` / `resolveCheckAllAuth`
+4. `SyncDialog.tsx` 仍从 `fork/LazyPlatformList` 引入 `PlatformList`
+5. `background/index.ts` / `sync.ts` / `extractor.ts` / `reader/index.ts` 仍引用 `fork/extract-hardening`
 
 ## 手测
 
@@ -61,3 +75,5 @@ pnpm check:fork
 2. 确认草稿写入成功，UI 不长时间停在「保存中」
 3. 预览链接为 `https://yianso.cn/blog/{slug}`，不是 `https://mcp.yianso.cn/wp-admin/post.php?...`
 4. 正文含知乎图床外链时，不因传图重试卡住（默认不转存）
+5. 打开 popup：平台列表立即出现，**不**批量验登录；勾选某平台才检查；已登录高亮可选，未登录置灰「去登录」
+6. 扩展重载后不刷新页面，打开 popup 仍能提取文章；页面有 `[tea-sdk]ready` 时控制台不再刷 JSON 解析错误

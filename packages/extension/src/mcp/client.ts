@@ -8,6 +8,8 @@ import {
 } from '../adapters'
 import { markdownToHtml } from '@wechatsync/core'
 import { createLogger } from '../lib/logger'
+// FORK: 提取时 content script 注入重试
+import { sendTabMessage } from '../fork/extract-hardening'
 import { performSync } from '../background/sync-service'
 
 const logger = createLogger('MCPClient')
@@ -375,29 +377,12 @@ class McpClient {
         if (!tabs[0]?.id) throw new Error('No active tab found')
         const tabId = tabs[0].id
 
-        try {
-          const response = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_ARTICLE' })
-          return response?.article || null
-        } catch {
-          // content script 未加载，尝试注入后重试
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ['reader.js', 'Readability.js'],
-          })
-          // 注入 extractor content script
-          const manifest = chrome.runtime.getManifest()
-          const extractorScript = manifest.content_scripts
-            ?.flatMap(cs => cs.js || [])
-            .find(js => js.includes('extractor'))
-          if (extractorScript) {
-            await chrome.scripting.executeScript({
-              target: { tabId },
-              files: [extractorScript],
-            })
-          }
-          const response = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_ARTICLE' })
-          return response?.article || null
-        }
+        const response = await sendTabMessage<{ article?: unknown }>(
+          tabId,
+          { type: 'EXTRACT_ARTICLE' },
+          { tabUrl: tabs[0].url }
+        )
+        return response?.article || null
       }
 
       case 'uploadImage': {

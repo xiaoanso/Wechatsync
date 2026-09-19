@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import { ArticleCard } from './ArticleCard'
-import { PlatformList } from './PlatformList'
+// FORK: 懒检查登录列表（升级上游后请保持此 import）
+import { PlatformList } from '../../fork/LazyPlatformList'
 import { PromoBanner } from './PromoBanner'
 import { SharePrompt } from './SharePrompt'
 import type { SyncDialogProps } from './types'

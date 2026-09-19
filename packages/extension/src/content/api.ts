@@ -152,7 +152,7 @@ window.addEventListener('message', async (evt) => {
 
     // getAccounts - 获取已登录平台（任何页面可调用）
     if (action.method === 'getAccounts') {
-      chrome.runtime.sendMessage({ type: 'CHECK_ALL_AUTH' }, (resp) => {
+      chrome.runtime.sendMessage({ type: 'CHECK_ALL_AUTH', payload: { forceAuth: true } }, (resp) => {
         if (chrome.runtime.lastError) {
           logger.error('getAccounts error:', chrome.runtime.lastError);
           sendToWindow({ eventID: action.eventID, result: [] });

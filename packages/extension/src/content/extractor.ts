@@ -17,6 +17,8 @@ import { htmlToMarkdownNative, type PreprocessConfig } from '@wechatsync/core'
 import { createLogger } from '../lib/logger'
 import { preprocessContentDOM, preprocessForPlatform, backupAndSimplifyCodeBlocks, restoreCodeBlocks, type PreprocessResult } from '../lib/content-processor'
 import { createSyncFab } from '../lib/fab'
+// FORK: 忽略页面非 JSON postMessage（如 tea-sdk）
+import { parseEditorMessage } from '../fork/extract-hardening'
 
 const logger = createLogger('Extractor')
 
@@ -1018,12 +1020,12 @@ function openEditor(article: ExtractedArticle, platforms: any[], selectedPlatfor
   // 等待 iframe 准备好后发送数据
   const handleEditorReady = (event: MessageEvent) => {
     try {
-      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-      if (data.type === 'EDITOR_READY') {
+      const data = parseEditorMessage(event.data)
+      if (data?.type === 'EDITOR_READY') {
         sendDataToEditor(article, platforms, selectedPlatformIds)
         window.removeEventListener('message', handleEditorReady)
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -1107,7 +1109,8 @@ function preprocessForMultiplePlatformsLocal(
  */
 window.addEventListener('message', async (event) => {
   try {
-    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    const data = parseEditorMessage(event.data)
+    if (!data?.type) return
 
     if (data.type === 'CLOSE_EDITOR') {
       closeEditor()
@@ -1116,8 +1119,9 @@ window.addEventListener('message', async (event) => {
       if (!editorIframe) return
       // 转发同步请求到 background
       // 编辑器传来的是 HTML content
-      const rawHtml = data.article.content || ''
-      const platforms: string[] = data.platforms || []
+      const article = data.article as { content?: string } | undefined
+      const rawHtml = article?.content || ''
+      const platforms: string[] = (data.platforms as string[]) || []
 
       // 从 background 获取各平台的预处理配置
       const configResponse = await chrome.runtime.sendMessage({
@@ -1135,7 +1139,7 @@ window.addEventListener('message', async (event) => {
       chrome.runtime.sendMessage({
         type: 'START_SYNC_FROM_EDITOR',
         article: {
-          ...data.article,
+          ...article,
           // 保留一份默认内容（兼容）
           html: rawHtml,
           markdown: htmlToMarkdownNative(rawHtml),

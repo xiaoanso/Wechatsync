@@ -10,6 +10,8 @@ import {
 } from '../../lib/analytics'
 import { checkSyncFrequency } from '../../lib/rate-limit'
 import { createLogger } from '../../lib/logger'
+// FORK: 提取健壮性（注入重试 / 跳过不可注入页）
+import { extractArticleFromActiveTab } from '../../fork/extract-hardening'
 
 const logger = createLogger('SyncStore')
 
@@ -257,24 +259,28 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
 
     try {
-      // CHECK_ALL_AUTH 现在返回 DSL 和 CMS 合并的列表
+      // FORK: CHECK_ALL_AUTH 默认不再验登录；保留全量列表供名称等使用
       const platformResponse = await chrome.runtime.sendMessage({ type: 'CHECK_ALL_AUTH' })
 
-      // 只保留已认证的平台
-      const allPlatforms: Platform[] = (platformResponse.platforms || [])
-        .filter((p: any) => p.isAuthenticated)
+      const allPlatforms: Platform[] = (platformResponse.platforms || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        icon: p.icon,
+        homepage: p.homepage,
+        isAuthenticated: !!p.isAuthenticated,
+        username: p.username,
+      }))
 
-      // 加载保存的平台选择
+      // 仅 CMS 等已带登录态的可恢复选中；DSL 需勾选时再验
       const savedSelections = await loadSelectedPlatforms()
-      const authenticatedIds = allPlatforms.map(p => p.id)
+      const readyIds = allPlatforms.filter(p => p.isAuthenticated).map(p => p.id)
+      const readySet = new Set(readyIds)
 
-      // 过滤出仍然有效的已选平台（已登录的平台）
       let selectedPlatforms: string[] = []
       if (savedSelections && savedSelections.length > 0) {
-        selectedPlatforms = savedSelections.filter(id => authenticatedIds.includes(id))
+        selectedPlatforms = savedSelections.filter(id => readySet.has(id))
       }
 
-      // 如果正在同步或已完成，只更新平台列表，不改变状态和选择
       if (preserveStatus) {
         set({ platforms: allPlatforms })
       } else {
@@ -310,16 +316,12 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       }
 
       // 如果没有待同步文章，尝试从当前标签页提取
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      logger.debug('loadArticle - current tab:', tab?.url)
-      if (!tab?.id) return
-
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_ARTICLE' })
-      logger.debug('loadArticle - response:', response)
-      if (response?.article) {
-        set({ article: response.article })
-        // 追踪内容特征
-        trackArticleProfile(response.article, 'popup')
+      // FORK: extract-hardening（无 content script 时注入重试）
+      const article = await extractArticleFromActiveTab()
+      logger.debug('loadArticle - response:', article)
+      if (article) {
+        set({ article })
+        trackArticleProfile(article, 'popup')
       }
     } catch (error) {
       logger.error('Failed to extract article:', error)

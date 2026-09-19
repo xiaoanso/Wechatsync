@@ -1,6 +1,5 @@
 import {
   initAdapters,
-  checkAllPlatformsAuth,
   checkPlatformAuth,
   syncToMultiplePlatforms,
   getAllPlatformMetas,
@@ -12,6 +11,7 @@ import {
 import * as wordpressAdapter from '../adapters/cms/wordpress'
 import * as metaweblogAdapter from '../adapters/cms/metaweblog'
 import { publishArticleToCms } from '../fork/yian-cms'
+import { resolveCheckAllAuth, listPlatformsWithoutAuth } from '../fork/lazy-platform-auth'
 import { startMcpClient, stopMcpClient, getMcpStatus, mcpClient } from '../mcp/client'
 import { createLogger } from '../lib/logger'
 import {
@@ -29,6 +29,8 @@ import {
 import { checkSyncFrequency, recordSync } from '../lib/rate-limit'
 import { checkForUpdates, isUpdateDismissed } from '../lib/version-check'
 import { fetchRemoteConfig, fetchConfigIfNeeded } from '../lib/remote-config'
+// FORK: OPEN_EDITOR 时注入 content script 重试
+import { sendTabMessage } from '../fork/extract-hardening'
 
 const logger = createLogger('Background')
 
@@ -124,7 +126,7 @@ async function clearSyncState() {
 // 消息类型
 type MessageAction =
   | { type: 'GET_PLATFORMS' }
-  | { type: 'CHECK_ALL_AUTH'; payload?: { forceRefresh?: boolean } }
+  | { type: 'CHECK_ALL_AUTH'; payload?: { forceRefresh?: boolean; forceAuth?: boolean } }
   | { type: 'CHECK_AUTH'; payload: { platformId: string } }
   | { type: 'SYNC_ARTICLE'; payload: { article: any; platforms: string[]; allSelectedPlatforms?: string[]; skipHistory?: boolean; source?: string; syncId?: string } }
   | { type: 'OPEN_SYNC_PAGE'; path?: string }
@@ -168,35 +170,8 @@ async function handleMessage(message: MessageAction, sender?: chrome.runtime.Mes
     }
 
     case 'CHECK_ALL_AUTH': {
-      const forceRefresh = message.payload?.forceRefresh ?? false
-      const dslPlatforms = await checkAllPlatformsAuth(forceRefresh)
-
-      // 为 DSL 平台添加 sourceType
-      const dslWithType = dslPlatforms.map((p: any) => ({
-        ...p,
-        sourceType: 'dsl' as const,
-      }))
-
-      // 同时加载 CMS 账户
-      const cmsStorage = await chrome.storage.local.get('cmsAccounts')
-      const cmsAccounts = cmsStorage.cmsAccounts || []
-      const cmsPlatforms = cmsAccounts
-        .filter((a: any) => a.isConnected)
-        .map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          icon: getCmsIcon(a.type),
-          homepage: a.url,
-          isAuthenticated: true,
-          username: a.username,
-          sourceType: 'cms' as const,
-          cmsType: a.type,
-        }))
-
-      const allPlatforms = [...dslWithType, ...cmsPlatforms]
-      // 缓存完整平台列表，供 popup 启动时立即渲染
-      chrome.storage.local.set({ platformListCache: allPlatforms }).catch(() => {})
-      return { platforms: allPlatforms }
+      // FORK: 默认不批量 checkAuth；getAccounts 传 forceAuth: true
+      return resolveCheckAllAuth(message.payload)
     }
 
     case 'CHECK_AUTH': {
@@ -968,32 +943,13 @@ async function handleMessage(message: MessageAction, sender?: chrome.runtime.Mes
       const tabId = sender?.tab?.id
       if (!tabId) return { success: false }
 
-      const dslPlatforms = await checkAllPlatformsAuth(false)
-      const dslWithType = dslPlatforms.map((p: any) => ({
-        ...p,
-        sourceType: 'dsl' as const,
-      }))
-
-      const cmsStorage = await chrome.storage.local.get('cmsAccounts')
-      const cmsAccounts = cmsStorage.cmsAccounts || []
-      const cmsPlatforms = cmsAccounts
-        .filter((a: any) => a.isConnected)
-        .map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          icon: getCmsIcon(a.type),
-          homepage: a.url,
-          isAuthenticated: true,
-          username: a.username,
-          sourceType: 'cms' as const,
-          cmsType: a.type,
-        }))
-
-      chrome.tabs.sendMessage(tabId, {
+      // FORK: 打开时不批量验登录
+      const platforms = await listPlatformsWithoutAuth()
+      await sendTabMessage(tabId, {
         type: 'OPEN_EDITOR',
-        platforms: [...dslWithType, ...cmsPlatforms],
+        platforms,
         selectedPlatforms: [],
-      })
+      }, { tabUrl: sender?.tab?.url })
       return { success: true }
     }
 
@@ -1033,40 +989,13 @@ function getCmsIcon(type: string): string {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'wechatsync-open-editor' && tab?.id) {
     try {
-      // 获取 DSL 平台
-      const dslPlatforms = await checkAllPlatformsAuth(false)
-
-      // 为 DSL 平台添加 sourceType
-      const dslWithType = dslPlatforms.map((p: any) => ({
-        ...p,
-        sourceType: 'dsl' as const,
-      }))
-
-      // 获取 CMS 账户
-      const cmsStorage = await chrome.storage.local.get('cmsAccounts')
-      const cmsAccounts = cmsStorage.cmsAccounts || []
-      const cmsPlatforms = cmsAccounts
-        .filter((a: any) => a.isConnected)
-        .map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          icon: getCmsIcon(a.type),
-          homepage: a.url,
-          isAuthenticated: true,
-          username: a.username,
-          sourceType: 'cms' as const,
-          cmsType: a.type,
-        }))
-
-      // 合并所有平台
-      const allPlatforms = [...dslWithType, ...cmsPlatforms]
-
-      // 发送消息到 content script 打开编辑器
-      chrome.tabs.sendMessage(tab.id, {
+      // FORK: 打开时不批量验登录
+      const platforms = await listPlatformsWithoutAuth()
+      await sendTabMessage(tab.id, {
         type: 'OPEN_EDITOR',
-        platforms: allPlatforms,
-        selectedPlatforms: [], // 右键打开时默认选中所有已登录平台
-      })
+        platforms,
+        selectedPlatforms: [],
+      }, { tabUrl: tab.url })
     } catch (error) {
       logger.error(' Failed to open editor from context menu:', error)
     }
@@ -1151,17 +1080,11 @@ async function initMcpIfEnabled() {
 initMcpIfEnabled()
 
 /**
- * 预检查平台认证状态（后台静默执行）
- * 在扩展启动/安装时预热缓存，提升 popup 打开速度
+ * FORK: 不再启动时批量 checkAuth（改为勾选时懒检查）。
+ * 保留函数以免上游其它引用断裂。
  */
 async function preCheckPlatformsAuth() {
-  logger.info(' Pre-checking platform auth...')
-  try {
-    await checkAllPlatformsAuth(false) // 使用缓存，不强制刷新
-    logger.info(' Pre-check completed')
-  } catch (error) {
-    logger.error(' Pre-check failed:', error)
-  }
+  logger.info(' Pre-check skipped (fork lazy auth)')
 }
 
 // 浏览器启动时预检查

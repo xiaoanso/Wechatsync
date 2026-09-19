@@ -9,6 +9,8 @@
  */
 import Defuddle from 'defuddle'
 import { createLogger } from '../logger'
+// FORK: clone 时补 base，避免 Defuddle Invalid URL
+import { cloneDocumentForExtraction } from '../../fork/extract-hardening'
 
 const logger = createLogger('Reader')
 
@@ -439,9 +441,7 @@ function extractWithSafariReader(): ReaderResult | null {
 function extractWithDefuddle(): ReaderResult | null {
   try {
     // Defuddle 需要克隆的 document（此时代码块已是纯文本）
-    const docClone = document.cloneNode(true) as Document
-    // 移除插件注入的 UI 元素（loading 遮罩、悬浮按钮、编辑器等）
-    docClone.querySelectorAll('[data-wechatsync-ui]').forEach(el => el.remove())
+    const docClone = cloneDocumentForExtraction()
     const defuddle = new Defuddle(docClone, {
       // 关闭 standardize，我们有自己的代码块/KaTeX 预处理
       standardize: false,
@@ -490,8 +490,7 @@ function extractWithDefuddle(): ReaderResult | null {
 function extractWithReadability(): ReaderResult | null {
   try {
     // Readability 需要克隆的 document（此时代码块已是纯文本）
-    const docClone = document.cloneNode(true) as Document
-    docClone.querySelectorAll('[data-wechatsync-ui]').forEach(el => el.remove())
+    const docClone = cloneDocumentForExtraction()
     const reader = new Readability(docClone)
     const article = reader.parse()
 
