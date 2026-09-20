@@ -16,9 +16,12 @@ import { extractArticle as extractWithReader, ReaderResult } from '../lib/reader
 import { htmlToMarkdownNative, type PreprocessConfig } from '@wechatsync/core'
 import { createLogger } from '../lib/logger'
 import { preprocessContentDOM, preprocessForPlatform, backupAndSimplifyCodeBlocks, restoreCodeBlocks, type PreprocessResult } from '../lib/content-processor'
-import { createSyncFab } from '../lib/fab'
+// FORK: 可拖动 / 贴边半隐藏 FAB
+import { createSyncFab } from '../fork/draggable-fab'
 // FORK: 忽略页面非 JSON postMessage（如 tea-sdk）
 import { parseEditorMessage } from '../fork/extract-hardening'
+// FORK: 长按 FAB 直接打开选平台同步弹窗
+import { openQuickSyncDialog } from '../fork/quick-sync-dialog'
 
 const logger = createLogger('Extractor')
 
@@ -913,6 +916,25 @@ function injectFloatingButton() {
     onClick: () => {
       pendingLoading = showLoading()
       chrome.runtime.sendMessage({ type: 'TRIGGER_OPEN_EDITOR' })
+    },
+    // FORK: 长按 3 秒 → 与编辑器右上角「同步」相同的选平台弹窗
+    onLongPress: () => {
+      openQuickSyncDialog({
+        getArticle: async () => {
+          const article = await extractArticle()
+          if (!article) return null
+          return {
+            title: article.title,
+            content: article.html || article.markdown,
+            html: article.html,
+            markdown: article.markdown,
+            cover: article.cover,
+            url: article.source?.url,
+            source: article.source,
+          }
+        },
+        source: 'floating-longpress',
+      }).catch(() => {})
     },
   })
   btn.id = 'wechatsync-floating-btn'

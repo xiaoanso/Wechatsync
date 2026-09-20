@@ -15,6 +15,8 @@ const forkFiles = [
   'packages/extension/src/fork/lazy-platform-auth.ts',
   'packages/extension/src/fork/LazyPlatformList.tsx',
   'packages/extension/src/fork/extract-hardening.ts',
+  'packages/extension/src/fork/draggable-fab.ts',
+  'packages/extension/src/fork/quick-sync-dialog.ts',
 ]
 
 for (const forkFile of forkFiles) {
@@ -77,6 +79,30 @@ for (const rel of extractHardeningSites) {
   const src = readFileSync(path, 'utf8')
   if (!src.includes('fork/extract-hardening')) {
     errors.push(`${rel}: missing import from fork/extract-hardening`)
+  }
+}
+
+const fabSites = [
+  'packages/extension/src/content/extractor.ts',
+  'packages/extension/src/content/weixin.ts',
+]
+for (const rel of fabSites) {
+  const path = join(root, rel)
+  if (!existsSync(path)) {
+    errors.push(`missing call site ${rel}`)
+    continue
+  }
+  const src = readFileSync(path, 'utf8')
+  if (!src.includes('fork/draggable-fab')) {
+    errors.push(`${rel}: missing import from fork/draggable-fab`)
+  }
+}
+
+const extractorPath = join(root, 'packages/extension/src/content/extractor.ts')
+if (existsSync(extractorPath)) {
+  const src = readFileSync(extractorPath, 'utf8')
+  if (!src.includes('fork/quick-sync-dialog')) {
+    errors.push('extractor.ts: missing import from fork/quick-sync-dialog')
   }
 }
 

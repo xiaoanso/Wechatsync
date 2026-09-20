@@ -5,7 +5,8 @@
 
 import { htmlToMarkdownNative, type PreprocessConfig } from '@wechatsync/core'
 import { preprocessContentDOM, preprocessForPlatform, backupAndSimplifyCodeBlocks, restoreCodeBlocks } from '../lib/content-processor'
-import { createSyncFab } from '../lib/fab'
+// FORK: 可拖动 / 贴边半隐藏 FAB
+import { createSyncFab } from '../fork/draggable-fab'
 
 ;(() => {
 
@@ -19,6 +20,8 @@ function injectSyncButton() {
 
   const fab = createSyncFab({
     onClick: () => openSyncDialog(),
+    // FORK: 长按同样打开同步弹窗（带进度条确认，避免误触）
+    onLongPress: () => openSyncDialog(),
   })
 
   document.body.appendChild(fab)
